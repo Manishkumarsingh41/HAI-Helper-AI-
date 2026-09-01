@@ -1,9 +1,13 @@
 package com.manish.helperai
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -64,6 +68,7 @@ class MainActivity : ComponentActivity() {
             savedInstanceState
         )
 
+
         enableEdgeToEdge()
 
 
@@ -110,6 +115,13 @@ class MainActivity : ComponentActivity() {
                         response =
                             latestResponse,
 
+                        onCopy = {
+
+                            copyTextToClipboard(
+                                latestResponse
+                            )
+                        },
+
                         onClear = {
 
                             HelperAIResponseStore
@@ -138,6 +150,54 @@ class MainActivity : ComponentActivity() {
 
 
     // =========================================================
+    // COPY OCR TEXT
+    // =========================================================
+
+    private fun copyTextToClipboard(
+        text: String
+    ) {
+
+        if (
+            text.isBlank()
+        ) {
+
+            Toast.makeText(
+                this,
+                "No text to copy",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+
+        val clipboard =
+            getSystemService(
+                Context.CLIPBOARD_SERVICE
+            ) as ClipboardManager
+
+
+        val clip =
+            ClipData.newPlainText(
+                "HelperAI OCR",
+                text
+            )
+
+
+        clipboard.setPrimaryClip(
+            clip
+        )
+
+
+        Toast.makeText(
+            this,
+            "Text copied",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+
+    // =========================================================
     // OVERLAY PERMISSION / FLOATING BUTTON
     // =========================================================
 
@@ -162,9 +222,11 @@ class MainActivity : ComponentActivity() {
                     )
                 )
 
+
             startActivity(
                 intent
             )
+
 
             return
         }
@@ -199,6 +261,7 @@ class MainActivity : ComponentActivity() {
                 Intent(
                     Settings.ACTION_ACCESSIBILITY_SETTINGS
                 )
+
 
             startActivity(
                 intent
@@ -256,6 +319,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HelperAIScreen(
     response: String,
+
+    onCopy: () -> Unit,
 
     onClear: () -> Unit,
 
@@ -554,6 +619,10 @@ fun HelperAIScreen(
             )
 
 
+            // =================================================
+            // COPY + CLEAR BUTTONS
+            // =================================================
+
             Row(
                 modifier =
                     Modifier.fillMaxWidth(),
@@ -561,6 +630,26 @@ fun HelperAIScreen(
                 horizontalArrangement =
                     Arrangement.End
             ) {
+
+                Button(
+                    onClick =
+                        onCopy
+                ) {
+
+                    Text(
+                        text =
+                            "COPY"
+                    )
+                }
+
+
+                Spacer(
+                    modifier =
+                        Modifier.padding(
+                            horizontal = 6.dp
+                        )
+                )
+
 
                 Button(
                     onClick =

@@ -1,3 +1,4 @@
+
 package com.manish.helperai
 
 import android.accessibilityservice.AccessibilityService
@@ -31,10 +32,8 @@ import android.widget.TextView
 
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
-import java.util.LinkedHashSet
 import java.util.concurrent.atomic.AtomicBoolean
 
 import kotlin.math.abs
@@ -48,6 +47,7 @@ class HelperAccessibilityService : AccessibilityService() {
     companion object {
 
         private const val TAG = "HelperAI"
+        private const val SCAN_ANIMATION_COLOR = 0xFF7CFFB2.toInt()
 
         private const val OCR_DELAY_MS = 1200L
 
@@ -67,7 +67,7 @@ class HelperAccessibilityService : AccessibilityService() {
     // OCR
     // =========================================================
 
-    private val textRecognizer: TextRecognizer =
+    private val textRecognizer =
         TextRecognition.getClient(
             TextRecognizerOptions.DEFAULT_OPTIONS
         )
@@ -87,48 +87,48 @@ class HelperAccessibilityService : AccessibilityService() {
     // WINDOW MANAGER
     // =========================================================
 
-    private var windowManager: WindowManager? =
-        null
+    private var windowManager: WindowManager? = null
 
 
     // =========================================================
     // FLOATING BUTTON
     // =========================================================
 
-    private var floatingButton: ImageView? =
-        null
+    private var floatingButton: ImageView? = null
 
     private var floatingButtonParams:
-            WindowManager.LayoutParams? =
-        null
+            WindowManager.LayoutParams? = null
 
 
     // =========================================================
     // POPUP
     // =========================================================
 
-    private var scanPopup: PopupWindow? =
-        null
+    private var scanPopup: PopupWindow? = null
 
 
     // =========================================================
     // SELECTED AREA
     // =========================================================
 
-    private var selectionOverlay:
-            SelectionOverlayView? =
-        null
+    private var selectionOverlay: SelectionOverlayView? = null
 
-    private var selectionFrame:
-            SelectionFrameView? =
-        null
+    private var selectionFrame: SelectionFrameView? = null
 
     private var selectionParams:
-            WindowManager.LayoutParams? =
-        null
+            WindowManager.LayoutParams? = null
 
-    private var selectedAreaMode =
-        false
+    // =========================================================
+    // SCANNING ANIMATION OVERLAY
+    // =========================================================
+
+    private var scanAnimationOverlay:
+            ScanAnimationView? = null
+
+    private var scanAnimationParams:
+            WindowManager.LayoutParams? = null
+
+    private var selectedAreaMode = false
 
 
     private var selectedRect =
@@ -144,23 +144,17 @@ class HelperAccessibilityService : AccessibilityService() {
     // SCAN STATE
     // =========================================================
 
-    private var scanEnabled =
-        false
+    private var scanEnabled = false
 
-    private var serviceConnected =
-        false
+    private var serviceConnected = false
 
-    private var ocrScheduled =
-        false
+    private var ocrScheduled = false
 
-    private var lastScreenshotTime =
-        0L
+    private var lastScreenshotTime = 0L
 
-    private var lastOcrText =
-        ""
+    private var lastOcrText = ""
 
-    private var lastPackageName =
-        ""
+    private var lastPackageName = ""
 
     private var scanMode =
         ScanMode.NONE
@@ -192,15 +186,30 @@ class HelperAccessibilityService : AccessibilityService() {
                 intent: Intent?
             ) {
 
-                when (intent?.action) {
+                if (intent == null) {
+                    return
+                }
+
+
+                when (intent.action) {
 
                     ACTION_SHOW_FLOATING_BUTTON -> {
+
+                        Log.d(
+                            TAG,
+                            "COMMAND: SHOW FLOATING BUTTON"
+                        )
 
                         showFloatingButton()
                     }
 
 
                     ACTION_HIDE_FLOATING_BUTTON -> {
+
+                        Log.d(
+                            TAG,
+                            "COMMAND: HIDE FLOATING BUTTON"
+                        )
 
                         hideFloatingButton()
                     }
@@ -217,9 +226,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
         super.onServiceConnected()
 
-
-        serviceConnected =
-            true
+        serviceConnected = true
 
 
         windowManager =
@@ -231,16 +238,17 @@ class HelperAccessibilityService : AccessibilityService() {
         try {
 
             val filter =
-                IntentFilter().apply {
+                IntentFilter()
 
-                    addAction(
-                        ACTION_SHOW_FLOATING_BUTTON
-                    )
 
-                    addAction(
-                        ACTION_HIDE_FLOATING_BUTTON
-                    )
-                }
+            filter.addAction(
+                ACTION_SHOW_FLOATING_BUTTON
+            )
+
+
+            filter.addAction(
+                ACTION_HIDE_FLOATING_BUTTON
+            )
 
 
             if (
@@ -278,31 +286,33 @@ class HelperAccessibilityService : AccessibilityService() {
 
         Log.d(
             TAG,
-            "ACCESSIBILITY SERVICE CONNECTED"
+            "================================"
         )
 
+        Log.d(
+            TAG,
+            "ACCESSIBILITY SERVICE CONNECTED"
+        )
 
         Log.d(
             TAG,
             "UNIVERSAL SCREEN OCR READY"
         )
 
-
         Log.d(
             TAG,
             "FLOATING HAI LOGO READY"
         )
 
+        Log.d(
+            TAG,
+            "SCAN MODE = OFF"
+        )
 
-        // -----------------------------------------------------
-        // Automatically show floating logo when service starts.
-        // -----------------------------------------------------
-
-        mainHandler.postDelayed({
-
-            showFloatingButton()
-
-        }, 500L)
+        Log.d(
+            TAG,
+            "================================"
+        )
     }
 
 
@@ -316,9 +326,14 @@ class HelperAccessibilityService : AccessibilityService() {
 
         if (
             event == null ||
-            !serviceConnected ||
-            !scanEnabled
+            !serviceConnected
         ) {
+
+            return
+        }
+
+
+        if (!scanEnabled) {
 
             return
         }
@@ -331,7 +346,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         // -----------------------------------------------------
-        // Never OCR HelperAI itself.
+        // NEVER SCAN HELPERAI
         // -----------------------------------------------------
 
         if (
@@ -347,6 +362,13 @@ class HelperAccessibilityService : AccessibilityService() {
             packageName
 
 
+        Log.d(
+            TAG,
+            "EVENT type=${event.eventType} " +
+                    "package=$packageName"
+        )
+
+
         when (
             event.eventType
         ) {
@@ -358,6 +380,11 @@ class HelperAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
 
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+
+                Log.d(
+                    TAG,
+                    "SCAN EVENT -> OCR SCHEDULED"
+                )
 
                 scheduleOcr()
             }
@@ -405,14 +432,12 @@ class HelperAccessibilityService : AccessibilityService() {
             }
 
 
-        ocrScheduled =
-            true
+        ocrScheduled = true
 
 
         mainHandler.postDelayed({
 
-            ocrScheduled =
-                false
+            ocrScheduled = false
 
 
             if (scanEnabled) {
@@ -444,7 +469,7 @@ class HelperAccessibilityService : AccessibilityService() {
             Build.VERSION_CODES.R
         ) {
 
-            Log.e(
+            Log.d(
                 TAG,
                 "SCREENSHOT REQUIRES ANDROID 11+"
             )
@@ -453,9 +478,12 @@ class HelperAccessibilityService : AccessibilityService() {
         }
 
 
-        if (
-            ocrRunning.get()
-        ) {
+        if (ocrRunning.get()) {
+
+            Log.d(
+                TAG,
+                "OCR ALREADY RUNNING"
+            )
 
             return
         }
@@ -465,6 +493,11 @@ class HelperAccessibilityService : AccessibilityService() {
             lastPackageName ==
             this.packageName
         ) {
+
+            Log.d(
+                TAG,
+                "HELPERAI DETECTED -> OCR SKIPPED"
+            )
 
             return
         }
@@ -484,6 +517,10 @@ class HelperAccessibilityService : AccessibilityService() {
         }
 
 
+        lastScreenshotTime =
+            now
+
+
         if (
             !ocrRunning.compareAndSet(
                 false,
@@ -495,8 +532,30 @@ class HelperAccessibilityService : AccessibilityService() {
         }
 
 
-        lastScreenshotTime =
-            now
+        Log.d(
+            TAG,
+            "================================"
+        )
+
+        Log.d(
+            TAG,
+            "STARTING SCAN"
+        )
+
+        Log.d(
+            TAG,
+            "SCAN MODE = $scanMode"
+        )
+
+        Log.d(
+            TAG,
+            "SOURCE PACKAGE = $lastPackageName"
+        )
+
+        Log.d(
+            TAG,
+            "================================"
+        )
 
 
         val shouldCrop =
@@ -505,8 +564,16 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         // -----------------------------------------------------
-        // Hide selection frame before screenshot.
+        // Remove selection frame before screenshot.
+        //
+        // IMPORTANT:
+        // removeSelectionOverlayTemporarily() now also clears
+        // the stored View reference.
         // -----------------------------------------------------
+
+        // Hide every visual overlay for the actual screenshot so
+        // the animation/selection frame is never included in OCR.
+        hideScanAnimation()
 
         if (shouldCrop) {
 
@@ -526,6 +593,12 @@ class HelperAccessibilityService : AccessibilityService() {
                         screenshot: ScreenshotResult
                     ) {
 
+                        Log.d(
+                            TAG,
+                            "SCREENSHOT SUCCESS"
+                        )
+
+
                         processScreenshot(
                             screenshot,
                             shouldCrop
@@ -539,7 +612,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
                         Log.e(
                             TAG,
-                            "SCREENSHOT FAILED: $errorCode"
+                            "SCREENSHOT FAILED code=$errorCode"
                         )
 
 
@@ -548,12 +621,13 @@ class HelperAccessibilityService : AccessibilityService() {
                         )
 
 
-                        if (shouldCrop) {
+                        mainHandler.post {
 
-                            mainHandler.post {
-
+                            if (shouldCrop) {
                                 restoreSelectionOverlay()
                             }
+
+                            showScanAnimation()
                         }
                     }
                 }
@@ -575,25 +649,15 @@ class HelperAccessibilityService : AccessibilityService() {
             )
 
 
-            if (shouldCrop) {
-
-                mainHandler.post {
-
-                    restoreSelectionOverlay()
-                }
-            }
+            // Selection/animation overlays are restored only after
+            // ML Kit finishes. This keeps the screenshot clean.
+            // runOcr() handles that asynchronous lifecycle.
         }
     }
 
 
     // =========================================================
     // PROCESS SCREENSHOT
-    //
-    // IMPORTANT:
-    // Bitmap is NOT recycled here.
-    //
-    // ML Kit works asynchronously. The bitmap is recycled only
-    // after OCR completes.
     // =========================================================
 
     private fun processScreenshot(
@@ -601,13 +665,9 @@ class HelperAccessibilityService : AccessibilityService() {
         shouldCrop: Boolean
     ) {
 
-        var sourceBitmap:
-                Bitmap? =
-            null
+        var bitmap: Bitmap? = null
 
-        var ocrBitmap:
-                Bitmap? =
-            null
+        var finalBitmap: Bitmap? = null
 
 
         try {
@@ -626,11 +686,16 @@ class HelperAccessibilityService : AccessibilityService() {
                 )
 
 
-                finishOcrBitmap(
-                    sourceBitmap,
-                    ocrBitmap,
-                    shouldCrop
+                ocrRunning.set(
+                    false
                 )
+
+                mainHandler.post {
+                    if (shouldCrop) {
+                        restoreSelectionOverlay()
+                    }
+                    showScanAnimation()
+                }
 
 
                 return
@@ -656,10 +721,8 @@ class HelperAccessibilityService : AccessibilityService() {
                     )
 
 
-                    finishOcrBitmap(
-                        sourceBitmap,
-                        ocrBitmap,
-                        shouldCrop
+                    ocrRunning.set(
+                        false
                     )
 
 
@@ -667,18 +730,15 @@ class HelperAccessibilityService : AccessibilityService() {
                 }
 
 
-                sourceBitmap =
+                bitmap =
                     hardwareBitmap.copy(
                         Bitmap.Config.ARGB_8888,
                         false
                     )
 
 
-                hardwareBitmap.recycle()
-
-
                 if (
-                    sourceBitmap == null
+                    bitmap == null
                 ) {
 
                     Log.e(
@@ -687,10 +747,8 @@ class HelperAccessibilityService : AccessibilityService() {
                     )
 
 
-                    finishOcrBitmap(
-                        sourceBitmap,
-                        ocrBitmap,
-                        shouldCrop
+                    ocrRunning.set(
+                        false
                     )
 
 
@@ -701,7 +759,7 @@ class HelperAccessibilityService : AccessibilityService() {
                 Log.d(
                     TAG,
                     "SCREENSHOT BITMAP = " +
-                            "${sourceBitmap.width}x${sourceBitmap.height}"
+                            "${bitmap!!.width}x${bitmap!!.height}"
                 )
 
             } finally {
@@ -711,81 +769,62 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
             // -------------------------------------------------
-            // Crop only for Selected Area.
+            // CROP SELECTED AREA
             // -------------------------------------------------
 
-            ocrBitmap =
+            finalBitmap =
                 if (shouldCrop) {
 
                     cropToSelectedArea(
-                        sourceBitmap
+                        bitmap!!
                     )
 
                 } else {
 
-                    sourceBitmap
+                    bitmap
                 }
 
 
             if (
-                ocrBitmap == null
+                finalBitmap == null
             ) {
 
-                Log.e(
-                    TAG,
-                    "OCR BITMAP IS NULL"
+                ocrRunning.set(
+                    false
                 )
 
-
-                finishOcrBitmap(
-                    sourceBitmap,
-                    null,
-                    shouldCrop
-                )
+                mainHandler.post {
+                    if (shouldCrop) {
+                        restoreSelectionOverlay()
+                    }
+                    showScanAnimation()
+                }
 
 
                 return
             }
 
 
-            // -------------------------------------------------
-            // If cropped, source is no longer needed by OCR.
-            // It can be recycled immediately.
-            // The cropped bitmap stays alive until OCR finishes.
-            // -------------------------------------------------
+            // runOcr() takes ownership of finalBitmap and recycles it
+            // only after ML Kit finishes. Do not recycle it here.
+            runOcr(
+                finalBitmap,
+                shouldCrop
+            )
+
 
             if (
-                ocrBitmap !== sourceBitmap
+                finalBitmap !== bitmap
             ) {
 
-                recycleBitmap(
-                    sourceBitmap
-                )
-
-
-                sourceBitmap =
-                    null
+                // The cropped bitmap belongs to OCR. The original
+                // screenshot bitmap is no longer needed.
+                recycleBitmapSafely(bitmap!!)
             }
 
 
-            // -------------------------------------------------
-            // IMPORTANT:
-            // runOcr() owns ocrBitmap from this point.
-            //
-            // It will recycle it ONLY after ML Kit completes.
-            // -------------------------------------------------
-
-            val bitmapForOcr =
-                ocrBitmap
-
-
-            ocrBitmap =
-                null
-
-
-            runOcr(
-                bitmapForOcr
-            )
+            finalBitmap = null
+            bitmap = null
 
         } catch (
             exception: Exception
@@ -798,84 +837,35 @@ class HelperAccessibilityService : AccessibilityService() {
             )
 
 
-            finishOcrBitmap(
-                sourceBitmap,
-                ocrBitmap,
-                shouldCrop
+            ocrRunning.set(
+                false
             )
-        }
-    }
 
+        } finally {
 
-    // =========================================================
-    // FINISH BITMAP
-    // =========================================================
+            try {
 
-    private fun finishOcrBitmap(
-        sourceBitmap: Bitmap?,
-        ocrBitmap: Bitmap?,
-        shouldCrop: Boolean
-    ) {
+                bitmap?.recycle()
 
-        recycleBitmap(
-            sourceBitmap
-        )
-
-
-        recycleBitmap(
-            ocrBitmap
-        )
-
-
-        ocrRunning.set(
-            false
-        )
-
-
-        if (shouldCrop) {
-
-            mainHandler.post {
-
-                restoreSelectionOverlay()
-            }
-        }
-    }
-
-
-    // =========================================================
-    // RECYCLE BITMAP SAFELY
-    // =========================================================
-
-    private fun recycleBitmap(
-        bitmap: Bitmap?
-    ) {
-
-        if (
-            bitmap == null
-        ) {
-
-            return
-        }
-
-
-        try {
-
-            if (
-                !bitmap.isRecycled
+            } catch (
+                _: Exception
             ) {
-
-                bitmap.recycle()
             }
 
-        } catch (
-            exception: Exception
-        ) {
 
-            Log.d(
-                TAG,
-                "BITMAP RECYCLE ERROR",
-                exception
-            )
+            try {
+
+                finalBitmap?.recycle()
+
+            } catch (
+                _: Exception
+            ) {
+            }
+
+
+            // The asynchronous OCR operation owns final bitmap cleanup
+            // and overlay restoration.
+
         }
     }
 
@@ -891,9 +881,7 @@ class HelperAccessibilityService : AccessibilityService() {
         try {
 
             val frame =
-                Rect(
-                    selectedRect
-                )
+                Rect(selectedRect)
 
 
             val sourceWidth =
@@ -947,9 +935,15 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
             if (
-                width < 20 ||
-                height < 20
+                width < 10 ||
+                height < 10
             ) {
+
+                Log.e(
+                    TAG,
+                    "SELECTED AREA TOO SMALL"
+                )
+
 
                 return null
             }
@@ -988,17 +982,26 @@ class HelperAccessibilityService : AccessibilityService() {
 
     // =========================================================
     // OCR
-    //
-    // Bitmap lifecycle is handled HERE.
     // =========================================================
 
     private fun runOcr(
-        bitmap: Bitmap
+        bitmap: Bitmap,
+        shouldCrop: Boolean
     ) {
 
         Log.d(
             TAG,
+            "================================"
+        )
+
+        Log.d(
+            TAG,
             "OCR START"
+        )
+
+        Log.d(
+            TAG,
+            "================================"
         )
 
 
@@ -1012,103 +1015,125 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
             textRecognizer
-                .process(
-                    inputImage
-                )
+                .process(inputImage)
 
                 .addOnSuccessListener { result ->
 
-                    try {
-
-                        val formattedText =
-                            formatOcrResult(
-                                result.text
-                            )
+                    val rawText =
+                        result.text
 
 
-                        if (
-                            formattedText.length <
-                            MIN_TEXT_LENGTH
-                        ) {
-
-                            Log.d(
-                                TAG,
-                                "OCR TEXT TOO SHORT"
-                            )
-
-
-                            return@addOnSuccessListener
-                        }
-
-
-                        // -------------------------------------------------
-                        // Ignore exactly identical result.
-                        // -------------------------------------------------
-
-                        if (
-                            formattedText ==
-                            lastOcrText
-                        ) {
-
-                            Log.d(
-                                TAG,
-                                "OCR RESULT UNCHANGED"
-                            )
-
-
-                            return@addOnSuccessListener
-                        }
-
-
-                        lastOcrText =
-                            formattedText
-
-
-                        Log.d(
-                            TAG,
-                            "OCR SUCCESS"
+                    val fullText =
+                        formatOcrText(
+                            rawText
                         )
 
 
-                        Log.d(
-                            TAG,
-                            "OCR TEXT LENGTH = " +
-                                    formattedText.length
-                        )
+                    Log.d(
+                        TAG,
+                        "================================"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "OCR SUCCESS"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "OCR TEXT LENGTH = ${fullText.length}"
+                    )
 
 
-                        Log.d(
-                            TAG,
-                            "----- FORMATTED OCR -----"
-                        )
-
-
-                        logTextInChunks(
-                            formattedText
-                        )
-
-
-                        Log.d(
-                            TAG,
-                            "----- END FORMATTED OCR -----"
-                        )
-
-
-                        HelperAIResponseStore
-                            .updateResponse(
-                                formattedText
-                            )
-
-                    } catch (
-                        exception: Exception
+                    if (
+                        fullText.length <
+                        MIN_TEXT_LENGTH
                     ) {
 
-                        Log.e(
+                        Log.d(
                             TAG,
-                            "OCR RESULT PROCESSING ERROR",
-                            exception
+                            "OCR TEXT TOO SHORT"
                         )
+
+
+                        return@addOnSuccessListener
                     }
+
+
+                    // -------------------------------------------------
+                    // Ignore exactly identical OCR result
+                    // -------------------------------------------------
+
+                    if (
+                        fullText ==
+                        lastOcrText
+                    ) {
+
+                        Log.d(
+                            TAG,
+                            "OCR SCREEN UNCHANGED"
+                        )
+
+
+                        return@addOnSuccessListener
+                    }
+
+
+                    lastOcrText =
+                        fullText
+
+
+                    Log.d(
+                        TAG,
+                        "----- OCR RESULT -----"
+                    )
+
+
+                    logTextInChunks(
+                        fullText
+                    )
+
+
+                    Log.d(
+                        TAG,
+                        "----- END OCR RESULT -----"
+                    )
+
+
+                    // -------------------------------------------------
+                    // SEND RESULT TO MAIN APP
+                    // -------------------------------------------------
+
+                    HelperAIResponseStore
+                        .updateResponse(
+                            fullText
+                        )
+
+
+                    Log.d(
+                        TAG,
+                        "================================"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "NEW RESPONSE CAPTURED"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "RESPONSE SENT TO HELPER AI STORE"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "SOURCE PACKAGE = $lastPackageName"
+                    )
+
+                    Log.d(
+                        TAG,
+                        "================================"
+                    )
                 }
 
                 .addOnFailureListener { exception ->
@@ -1122,31 +1147,21 @@ class HelperAccessibilityService : AccessibilityService() {
 
                 .addOnCompleteListener {
 
-                    // -------------------------------------------------
-                    // CRITICAL FIX:
-                    // Recycle bitmap ONLY after ML Kit completes.
-                    // -------------------------------------------------
-
-                    recycleBitmap(
-                        bitmap
-                    )
-
-
+                    // ML Kit is completely finished with the bitmap now.
+                    // The visual scanning layer can safely return.
                     ocrRunning.set(
                         false
                     )
 
-
-                    if (
-                        selectedAreaMode &&
-                        scanEnabled &&
-                        scanMode ==
-                        ScanMode.SELECTED_AREA
-                    ) {
+                    if (scanEnabled) {
 
                         mainHandler.post {
 
-                            restoreSelectionOverlay()
+                            if (shouldCrop) {
+                                restoreSelectionOverlay()
+                            }
+
+                            showScanAnimation()
                         }
                     }
 
@@ -1168,40 +1183,48 @@ class HelperAccessibilityService : AccessibilityService() {
             )
 
 
-            recycleBitmap(
-                bitmap
-            )
-
-
             ocrRunning.set(
                 false
             )
 
-
-            if (
-                selectedAreaMode &&
-                scanEnabled
-            ) {
-
+            if (scanEnabled) {
                 mainHandler.post {
-
-                    restoreSelectionOverlay()
+                    if (shouldCrop) {
+                        restoreSelectionOverlay()
+                    }
+                    showScanAnimation()
                 }
             }
         }
     }
 
 
+    private fun recycleBitmapSafely(
+        bitmap: Bitmap
+    ) {
+
+        try {
+
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+
+        } catch (exception: Exception) {
+
+            Log.d(
+                TAG,
+                "BITMAP RECYCLE ERROR",
+                exception
+            )
+        }
+    }
+
+
     // =========================================================
-    // OCR FORMATTER
-    //
-    // Goal:
-    // Raw OCR
-    //     ↓
-    // clean readable text
+    // OCR TEXT FORMATTING
     // =========================================================
 
-    private fun formatOcrResult(
+    private fun formatOcrText(
         text: String
     ): String {
 
@@ -1213,7 +1236,7 @@ class HelperAccessibilityService : AccessibilityService() {
         }
 
 
-        val normalized =
+        val lines =
             text
                 .replace(
                     "\r\n",
@@ -1223,27 +1246,21 @@ class HelperAccessibilityService : AccessibilityService() {
                     "\r",
                     "\n"
                 )
+                .lines()
 
 
-        val rawLines =
-            normalized
-                .split(
-                    "\n"
-                )
-
-
-        val cleanedLines =
-            ArrayList<String>()
+        val output =
+            StringBuilder()
 
 
         for (
-        rawLine in rawLines
+        rawLine in lines
         ) {
 
-            var line =
+            val line =
                 rawLine
                     .replace(
-                        Regex("[\\t ]+"),
+                        Regex("\\s+"),
                         " "
                     )
                     .trim()
@@ -1257,277 +1274,25 @@ class HelperAccessibilityService : AccessibilityService() {
             }
 
 
-            // -------------------------------------------------
-            // Remove spaces before punctuation.
-            // -------------------------------------------------
-
-            line =
-                line.replace(
-                    Regex("\\s+([,.!?;:%])"),
-                    "$1"
-                )
-
-
-            // -------------------------------------------------
-            // Normalize brackets.
-            // -------------------------------------------------
-
-            line =
-                line.replace(
-                    Regex("\\(\\s+"),
-                    "("
-                )
-
-
-            line =
-                line.replace(
-                    Regex("\\s+\\)"),
-                    ")"
-                )
-
-
-            // -------------------------------------------------
-            // Common OCR spacing around colon.
-            // -------------------------------------------------
-
-            line =
-                line.replace(
-                    Regex("\\s*:\\s*"),
-                    ": "
-                )
-
-
-            // -------------------------------------------------
-            // Keep markdown-like bullets readable.
-            // -------------------------------------------------
-
-            line =
-                line.replace(
-                    Regex("^[-•●]\\s*"),
-                    "• "
-                )
-
-
-            cleanedLines.add(
-                line.trim()
-            )
-        }
-
-
-        if (
-            cleanedLines.isEmpty()
-        ) {
-
-            return ""
-        }
-
-
-        // =====================================================
-        // MERGE WRAPPED SENTENCE LINES
-        //
-        // Example:
-        //
-        // Natural Language Processing is a branch
-        // of Artificial Intelligence.
-        //
-        // becomes:
-        //
-        // Natural Language Processing is a branch of
-        // Artificial Intelligence.
-        // =====================================================
-
-        val formatted =
-            StringBuilder()
-
-
-        for (
-        index in cleanedLines.indices
-        ) {
-
-            val current =
-                cleanedLines[index]
-
-
             if (
-                formatted.isEmpty()
+                output.isNotEmpty()
             ) {
 
-                formatted.append(
-                    current
-                )
-
-                continue
-            }
-
-
-            val previous =
-                formatted
-                    .toString()
-                    .takeLastWhile {
-                        it != '\n'
-                    }
-
-
-            val shouldJoin =
-                shouldJoinLines(
-                    previous,
-                    current
-                )
-
-
-            if (shouldJoin) {
-
-                formatted.append(
-                    " "
-                )
-
-                formatted.append(
-                    current
-                )
-
-            } else {
-
-                formatted.append(
+                output.append(
                     "\n"
                 )
-
-                formatted.append(
-                    current
-                )
             }
+
+
+            output.append(
+                line
+            )
         }
 
 
-        return formatted
+        return output
             .toString()
-            .replace(
-                Regex("[ ]{2,}"),
-                " "
-            )
-            .replace(
-                Regex("\n{3,}"),
-                "\n\n"
-            )
             .trim()
-    }
-
-
-    // =========================================================
-    // SHOULD JOIN OCR LINES
-    // =========================================================
-
-    private fun shouldJoinLines(
-        previous: String,
-        current: String
-    ): Boolean {
-
-        if (
-            previous.isBlank() ||
-            current.isBlank()
-        ) {
-
-            return false
-        }
-
-
-        // -----------------------------------------------------
-        // Never join bullets/lists.
-        // -----------------------------------------------------
-
-        if (
-            current.matches(
-                Regex(
-                    "^(•|[-*]|\\d+[.)]|[a-zA-Z][.)])\\s+.*"
-                )
-            )
-        ) {
-
-            return false
-        }
-
-
-        // -----------------------------------------------------
-        // Never join obvious headings.
-        // -----------------------------------------------------
-
-        if (
-            current.length <= 60 &&
-            !current.endsWith(".") &&
-            !current.endsWith(",") &&
-            !current.endsWith(":") &&
-            current.firstOrNull()
-                ?.isUpperCase() == true
-        ) {
-
-            val words =
-                current.split(
-                    Regex("\\s+")
-                )
-
-
-            if (
-                words.size <= 8
-            ) {
-
-                return false
-            }
-        }
-
-
-        // -----------------------------------------------------
-        // If previous ends with punctuation, new sentence.
-        // -----------------------------------------------------
-
-        if (
-            previous.endsWith(".") ||
-            previous.endsWith("!") ||
-            previous.endsWith("?") ||
-            previous.endsWith(":")
-        ) {
-
-            return false
-        }
-
-
-        // -----------------------------------------------------
-        // If current starts with lowercase, it is very likely
-        // a wrapped continuation.
-        // -----------------------------------------------------
-
-        if (
-            current.firstOrNull()
-                ?.isLowerCase() == true
-        ) {
-
-            return true
-        }
-
-
-        // -----------------------------------------------------
-        // Short OCR lines are generally separate content.
-        // -----------------------------------------------------
-
-        if (
-            previous.length < 25
-        ) {
-
-            return false
-        }
-
-
-        // -----------------------------------------------------
-        // If previous looks incomplete, join it.
-        // -----------------------------------------------------
-
-        return !previous.endsWith(
-            ","
-        ) &&
-                !previous.endsWith(
-                    ";"
-                ) &&
-                previous.split(
-                    Regex("\\s+")
-                ).size >= 5
     }
 
 
@@ -1537,23 +1302,11 @@ class HelperAccessibilityService : AccessibilityService() {
 
     private fun showFloatingButton() {
 
-        if (
-            !serviceConnected
-        ) {
+        if (!serviceConnected) {
 
-            return
-        }
-
-
-        if (
-            Build.VERSION.SDK_INT >=
-            Build.VERSION_CODES.M &&
-            !Settings.canDrawOverlays(this)
-        ) {
-
-            Log.e(
+            Log.d(
                 TAG,
-                "OVERLAY PERMISSION NOT GRANTED"
+                "SERVICE NOT CONNECTED"
             )
 
 
@@ -1562,8 +1315,36 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         if (
+            Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.M
+        ) {
+
+            if (
+                !Settings.canDrawOverlays(
+                    this
+                )
+            ) {
+
+                Log.e(
+                    TAG,
+                    "OVERLAY PERMISSION NOT GRANTED"
+                )
+
+
+                return
+            }
+        }
+
+
+        if (
             floatingButton != null
         ) {
+
+            Log.d(
+                TAG,
+                "FLOATING BUTTON ALREADY SHOWN"
+            )
+
 
             return
         }
@@ -1573,6 +1354,10 @@ class HelperAccessibilityService : AccessibilityService() {
             windowManager
                 ?: return
 
+
+        // =====================================================
+        // IMAGE BUTTON
+        // =====================================================
 
         val button =
             ImageView(this)
@@ -1586,6 +1371,10 @@ class HelperAccessibilityService : AccessibilityService() {
         button.scaleType =
             ImageView.ScaleType.CENTER_CROP
 
+
+        // =====================================================
+        // CIRCULAR CLIPPING
+        // =====================================================
 
         button.outlineProvider =
             object : ViewOutlineProvider() {
@@ -1614,7 +1403,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         // =====================================================
-        // DRAG + TAP
+        // TOUCH / DRAG
         // =====================================================
 
         button.setOnTouchListener(
@@ -1622,7 +1411,6 @@ class HelperAccessibilityService : AccessibilityService() {
 
                 private var initialX =
                     0
-
 
                 private var initialY =
                     0
@@ -1771,6 +1559,10 @@ class HelperAccessibilityService : AccessibilityService() {
         )
 
 
+        // =====================================================
+        // WINDOW TYPE
+        // =====================================================
+
         val overlayType =
             if (
                 Build.VERSION.SDK_INT >=
@@ -1787,12 +1579,21 @@ class HelperAccessibilityService : AccessibilityService() {
             }
 
 
+        // =====================================================
+        // WINDOW PARAMS
+        // =====================================================
+
         val params =
             WindowManager.LayoutParams(
+
                 68,
+
                 68,
+
                 overlayType,
+
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+
                 PixelFormat.TRANSLUCENT
             )
 
@@ -1828,7 +1629,17 @@ class HelperAccessibilityService : AccessibilityService() {
 
             Log.d(
                 TAG,
+                "================================"
+            )
+
+            Log.d(
+                TAG,
                 "CIRCULAR HAI LOGO SHOWN"
+            )
+
+            Log.d(
+                TAG,
+                "================================"
             )
 
         } catch (
@@ -1899,6 +1710,10 @@ class HelperAccessibilityService : AccessibilityService() {
             background
 
 
+        // =====================================================
+        // TITLE
+        // =====================================================
+
         val title =
             TextView(this)
 
@@ -1912,7 +1727,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         title.setTextColor(
-            Color.WHITE
+            0xFFF25CBE.toInt()
         )
 
 
@@ -1976,7 +1791,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         // =====================================================
-        // STOP
+        // STOP SCAN
         // =====================================================
 
         val stopButton =
@@ -1997,6 +1812,10 @@ class HelperAccessibilityService : AccessibilityService() {
             stopButton
         )
 
+
+        // =====================================================
+        // POPUP
+        // =====================================================
 
         val popup =
             PopupWindow(
@@ -2056,7 +1875,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         button.setTextColor(
-            Color.WHITE
+            0xFFF25CBE.toInt()
         )
 
 
@@ -2122,9 +1941,6 @@ class HelperAccessibilityService : AccessibilityService() {
 
     private fun startFullScreenScan() {
 
-        stopScan()
-
-
         selectedAreaMode =
             false
 
@@ -2135,6 +1951,9 @@ class HelperAccessibilityService : AccessibilityService() {
 
         scanEnabled =
             true
+
+
+        removeSelectionOverlay()
 
 
         HelperAIResponseStore
@@ -2148,16 +1967,33 @@ class HelperAccessibilityService : AccessibilityService() {
         lastScreenshotTime =
             0L
 
+        showScanAnimation()
+
+
+        Log.d(
+            TAG,
+            "================================"
+        )
 
         Log.d(
             TAG,
             "FULL SCREEN SCAN = ON"
         )
+
+        Log.d(
+            TAG,
+            "SCROLL TO COLLECT TEXT"
+        )
+
+        Log.d(
+            TAG,
+            "================================"
+        )
     }
 
 
     // =========================================================
-    // SELECTED AREA MODE
+    // SELECTED AREA SELECTION
     // =========================================================
 
     private fun startSelectedAreaSelection() {
@@ -2228,6 +2064,10 @@ class HelperAccessibilityService : AccessibilityService() {
 
                 selectedRect =
                     Rect(rect)
+
+                scanAnimationOverlay?.setScanRect(
+                    Rect(selectedRect)
+                )
             }
 
 
@@ -2263,21 +2103,42 @@ class HelperAccessibilityService : AccessibilityService() {
 
                 Log.d(
                     TAG,
-                    "SELECTED AREA SCAN = ON"
+                    "================================"
                 )
 
+                Log.d(
+                    TAG,
+                    "SELECTED AREA SCAN = ON"
+                )
 
                 Log.d(
                     TAG,
                     "AREA = $selectedRect"
                 )
 
+                Log.d(
+                    TAG,
+                    "SCROLL TO COLLECT TEXT"
+                )
+
+                Log.d(
+                    TAG,
+                    "================================"
+                )
+
 
                 // -------------------------------------------------
-                // Scan immediately.
+                // Start the area-limited scanning animation.
                 // -------------------------------------------------
 
-                captureScreenForOcr()
+                showScanAnimation()
+
+                // -------------------------------------------------
+                // Immediately scan the selected area once.
+                // Later scrolling/content changes trigger more OCR.
+                // -------------------------------------------------
+
+                scheduleOcr()
             }
 
 
@@ -2318,10 +2179,15 @@ class HelperAccessibilityService : AccessibilityService() {
 
         val params =
             WindowManager.LayoutParams(
+
                 WindowManager.LayoutParams.MATCH_PARENT,
+
                 WindowManager.LayoutParams.MATCH_PARENT,
+
                 overlayType,
+
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+
                 PixelFormat.TRANSLUCENT
             )
 
@@ -2339,12 +2205,13 @@ class HelperAccessibilityService : AccessibilityService() {
             )
 
 
+            // -------------------------------------------------
+            // IMPORTANT:
+            // Store the View ONLY after addView succeeds.
+            // -------------------------------------------------
+
             selectionOverlay =
                 root
-
-
-            selectionFrame =
-                root.frameView
 
 
             selectionParams =
@@ -2360,6 +2227,13 @@ class HelperAccessibilityService : AccessibilityService() {
             exception: Exception
         ) {
 
+            Log.e(
+                TAG,
+                "SELECTION OVERLAY ERROR",
+                exception
+            )
+
+
             selectionOverlay =
                 null
 
@@ -2370,13 +2244,6 @@ class HelperAccessibilityService : AccessibilityService() {
 
             selectionParams =
                 null
-
-
-            Log.e(
-                TAG,
-                "SELECTION OVERLAY ERROR",
-                exception
-            )
         }
     }
 
@@ -2390,6 +2257,13 @@ class HelperAccessibilityService : AccessibilityService() {
         val overlay =
             selectionOverlay
 
+
+        // -----------------------------------------------------
+        // Clear references FIRST.
+        //
+        // This prevents a second removeView() call from using
+        // an already detached View.
+        // -----------------------------------------------------
 
         selectionOverlay =
             null
@@ -2417,9 +2291,20 @@ class HelperAccessibilityService : AccessibilityService() {
                 overlay
             )
 
+
+            Log.d(
+                TAG,
+                "SELECTION OVERLAY REMOVED"
+            )
+
         } catch (
             exception: IllegalArgumentException
         ) {
+
+            // -------------------------------------------------
+            // View was already removed.
+            // This is no longer treated as a real error.
+            // -------------------------------------------------
 
             Log.d(
                 TAG,
@@ -2440,7 +2325,7 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
     // =========================================================
-    // TEMPORARILY REMOVE SELECTION FRAME
+    // TEMPORARILY REMOVE FRAME FOR SCREENSHOT
     // =========================================================
 
     private fun removeSelectionOverlayTemporarily() {
@@ -2448,6 +2333,18 @@ class HelperAccessibilityService : AccessibilityService() {
         val overlay =
             selectionOverlay
 
+
+        if (
+            overlay == null
+        ) {
+
+            return
+        }
+
+
+        // -----------------------------------------------------
+        // Clear state BEFORE removing the View.
+        // -----------------------------------------------------
 
         selectionOverlay =
             null
@@ -2461,18 +2358,16 @@ class HelperAccessibilityService : AccessibilityService() {
             null
 
 
-        if (
-            overlay == null
-        ) {
-
-            return
-        }
-
-
         try {
 
             windowManager?.removeViewImmediate(
                 overlay
+            )
+
+
+            Log.d(
+                TAG,
+                "SELECTION FRAME TEMPORARILY REMOVED"
             )
 
         } catch (
@@ -2498,14 +2393,28 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
     // =========================================================
-    // RESTORE SELECTION FRAME
+    // RESTORE FRAME
     // =========================================================
 
     private fun restoreSelectionOverlay() {
 
         if (
-            !selectedAreaMode ||
-            !scanEnabled ||
+            !selectedAreaMode
+        ) {
+
+            return
+        }
+
+
+        if (
+            !scanEnabled
+        ) {
+
+            return
+        }
+
+
+        if (
             scanMode !=
             ScanMode.SELECTED_AREA
         ) {
@@ -2527,6 +2436,139 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
     // =========================================================
+    // SCANNING ANIMATION
+    // =========================================================
+
+    private fun showScanAnimation() {
+
+        if (!scanEnabled) {
+            return
+        }
+
+        val wm =
+            windowManager
+                ?: return
+
+        val isSelectedArea =
+            scanMode == ScanMode.SELECTED_AREA
+
+        val existing =
+            scanAnimationOverlay
+
+        if (existing != null) {
+            existing.setScanRect(
+                if (isSelectedArea) Rect(selectedRect) else null
+            )
+            existing.startAnimation()
+            return
+        }
+
+        val animationView =
+            ScanAnimationView(this)
+
+        animationView.setScanRect(
+            if (isSelectedArea) Rect(selectedRect) else null
+        )
+
+        val overlayType =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+        val params =
+            WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                overlayType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            )
+
+        params.gravity =
+            Gravity.TOP or Gravity.START
+
+        try {
+
+            wm.addView(
+                animationView,
+                params
+            )
+
+            scanAnimationOverlay =
+                animationView
+
+            scanAnimationParams =
+                params
+
+            animationView.startAnimation()
+
+            Log.d(
+                TAG,
+                if (isSelectedArea) {
+                    "SELECTED AREA SCANNING ANIMATION ON"
+                } else {
+                    "FULL SCREEN SCANNING ANIMATION ON"
+                }
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "SCAN ANIMATION ADD ERROR",
+                exception
+            )
+        }
+    }
+
+
+    private fun hideScanAnimation() {
+
+        val animationView =
+            scanAnimationOverlay
+
+        scanAnimationOverlay =
+            null
+
+        scanAnimationParams =
+            null
+
+        if (animationView == null) {
+            return
+        }
+
+        animationView.stopAnimation()
+
+        try {
+
+            windowManager?.removeViewImmediate(
+                animationView
+            )
+
+        } catch (exception: IllegalArgumentException) {
+
+            Log.d(
+                TAG,
+                "SCAN ANIMATION ALREADY REMOVED"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "SCAN ANIMATION REMOVE ERROR",
+                exception
+            )
+        }
+    }
+
+
+    // =========================================================
     // STOP SCAN
     // =========================================================
 
@@ -2543,6 +2585,8 @@ class HelperAccessibilityService : AccessibilityService() {
         selectedAreaMode =
             false
 
+        hideScanAnimation()
+
 
         ocrScheduled =
             false
@@ -2558,7 +2602,22 @@ class HelperAccessibilityService : AccessibilityService() {
 
         Log.d(
             TAG,
+            "================================"
+        )
+
+        Log.d(
+            TAG,
             "SCAN MODE = OFF"
+        )
+
+        Log.d(
+            TAG,
+            "OCR COLLECTION STOPPED"
+        )
+
+        Log.d(
+            TAG,
+            "================================"
         )
     }
 
@@ -2573,7 +2632,6 @@ class HelperAccessibilityService : AccessibilityService() {
 
 
         scanPopup?.dismiss()
-
 
         scanPopup =
             null
@@ -2624,11 +2682,17 @@ class HelperAccessibilityService : AccessibilityService() {
                 exception
             )
         }
+
+
+        Log.d(
+            TAG,
+            "FLOATING HAI BUTTON HIDDEN"
+        )
     }
 
 
     // =========================================================
-    // LOG LONG TEXT
+    // LONG TEXT LOGGING
     // =========================================================
 
     private fun logTextInChunks(
@@ -2704,7 +2768,6 @@ class HelperAccessibilityService : AccessibilityService() {
 
         scanPopup?.dismiss()
 
-
         scanPopup =
             null
 
@@ -2720,6 +2783,8 @@ class HelperAccessibilityService : AccessibilityService() {
         ) {
         }
 
+
+        hideScanAnimation()
 
         removeSelectionOverlay()
 
@@ -2763,7 +2828,238 @@ class HelperAccessibilityService : AccessibilityService() {
         }
 
 
+        Log.d(
+            TAG,
+            "ACCESSIBILITY SERVICE DESTROYED"
+        )
+
+
         super.onDestroy()
+    }
+}
+
+
+// =============================================================
+// SCANNING ANIMATION VIEW
+//
+// A subtle moving scan line. When a selected rectangle is supplied,
+// everything outside that rectangle is left untouched.
+// =============================================================
+
+private class ScanAnimationView(
+    context: Context
+) : View(context) {
+
+    private val paint =
+        android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        )
+
+    private val glowPaint =
+        android.graphics.Paint(
+            android.graphics.Paint.ANTI_ALIAS_FLAG
+        )
+
+    private var scanRect: Rect? =
+        null
+
+    private var scanY =
+        0f
+
+    private var animator:
+            android.animation.ValueAnimator? =
+        null
+
+    init {
+
+        setLayerType(
+            View.LAYER_TYPE_SOFTWARE,
+            null
+        )
+    }
+
+    fun setScanRect(
+        rect: Rect?
+    ) {
+
+        scanRect =
+            rect?.let { Rect(it) }
+
+        scanY =
+            scanRect?.top?.toFloat() ?: 0f
+
+        invalidate()
+    }
+
+    fun startAnimation() {
+
+        if (animator?.isRunning == true) {
+            return
+        }
+
+        val bounds =
+            scanRect
+
+        val start =
+            bounds?.top?.toFloat() ?: 0f
+
+        val end =
+            bounds?.bottom?.toFloat()
+                ?: height.toFloat()
+
+        scanY =
+            start
+
+        animator =
+            android.animation.ValueAnimator.ofFloat(
+                start,
+                end
+            ).apply {
+
+                duration =
+                    1500L
+
+                repeatCount =
+                    android.animation.ValueAnimator.INFINITE
+
+                repeatMode =
+                    android.animation.ValueAnimator.RESTART
+
+                interpolator =
+                    android.view.animation.LinearInterpolator()
+
+                addUpdateListener { valueAnimator ->
+
+                    scanY =
+                        valueAnimator.animatedValue as Float
+
+                    invalidate()
+                }
+
+                start()
+            }
+    }
+
+    fun stopAnimation() {
+
+        animator?.cancel()
+
+        animator =
+            null
+    }
+
+    override fun onDraw(
+        canvas: android.graphics.Canvas
+    ) {
+
+        super.onDraw(canvas)
+
+        val bounds =
+            scanRect
+
+        if (bounds != null) {
+
+            canvas.save()
+
+            canvas.clipRect(bounds)
+
+            drawScanLine(
+                canvas,
+                bounds
+            )
+
+            canvas.restore()
+
+        } else {
+
+            drawScanLine(
+                canvas,
+                Rect(
+                    0,
+                    0,
+                    width,
+                    height
+                )
+            )
+        }
+    }
+
+    private fun drawScanLine(
+        canvas: android.graphics.Canvas,
+        bounds: Rect
+    ) {
+
+        val lineY =
+            scanY.coerceIn(
+                bounds.top.toFloat(),
+                bounds.bottom.toFloat()
+            )
+
+        // Soft glow above/below the line.
+        val gradient =
+            android.graphics.LinearGradient(
+                0f,
+                lineY - 45f,
+                0f,
+                lineY + 45f,
+                intArrayOf(
+                    Color.TRANSPARENT,
+                    Color.argb(35, 255, 255, 255),
+                    Color.argb(150, 255, 255, 255),
+                    Color.argb(35, 255, 255, 255),
+                    Color.TRANSPARENT
+                ),
+                null,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+
+        glowPaint.shader =
+            gradient
+
+        canvas.drawRect(
+            bounds.left.toFloat(),
+            lineY - 45f,
+            bounds.right.toFloat(),
+            lineY + 45f,
+            glowPaint
+        )
+
+        // Thin premium scan line.
+        paint.shader =
+            android.graphics.LinearGradient(
+                bounds.left.toFloat(),
+                0f,
+                bounds.right.toFloat(),
+                0f,
+                intArrayOf(
+                    Color.TRANSPARENT,
+                    Color.WHITE,
+                    Color.TRANSPARENT
+                ),
+                null,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+
+        canvas.drawRect(
+            bounds.left.toFloat(),
+            lineY - 1.5f,
+            bounds.right.toFloat(),
+            lineY + 1.5f,
+            paint
+        )
+
+        paint.shader =
+            null
+
+        glowPaint.shader =
+            null
+    }
+
+    override fun onDetachedFromWindow() {
+
+        stopAnimation()
+
+        super.onDetachedFromWindow()
     }
 }
 
@@ -2932,8 +3228,7 @@ private class SelectionFrameView(
     // =========================================================
 
     override fun onDraw(
-        canvas:
-        android.graphics.Canvas
+        canvas: android.graphics.Canvas
     ) {
 
         super.onDraw(
@@ -2942,12 +3237,12 @@ private class SelectionFrameView(
 
 
         // -----------------------------------------------------
-        // Outside dark overlay
+        // DARK AREA ABOVE
         // -----------------------------------------------------
 
         paint.color =
             Color.argb(
-                125,
+                120,
                 0,
                 0,
                 0
@@ -2963,6 +3258,10 @@ private class SelectionFrameView(
         )
 
 
+        // -----------------------------------------------------
+        // DARK AREA BELOW
+        // -----------------------------------------------------
+
         canvas.drawRect(
             0f,
             rect.bottom.toFloat(),
@@ -2972,6 +3271,10 @@ private class SelectionFrameView(
         )
 
 
+        // -----------------------------------------------------
+        // DARK AREA LEFT
+        // -----------------------------------------------------
+
         canvas.drawRect(
             0f,
             rect.top.toFloat(),
@@ -2980,6 +3283,10 @@ private class SelectionFrameView(
             paint
         )
 
+
+        // -----------------------------------------------------
+        // DARK AREA RIGHT
+        // -----------------------------------------------------
 
         canvas.drawRect(
             rect.right.toFloat(),
@@ -2991,7 +3298,7 @@ private class SelectionFrameView(
 
 
         // -----------------------------------------------------
-        // Selection border
+        // SELECTION BORDER
         // -----------------------------------------------------
 
         strokePaint.color =
@@ -3009,7 +3316,7 @@ private class SelectionFrameView(
 
 
         // -----------------------------------------------------
-        // Handles
+        // CORNER HANDLES
         // -----------------------------------------------------
 
         paint.color =
@@ -3053,7 +3360,7 @@ private class SelectionFrameView(
 
 
         // -----------------------------------------------------
-        // Bottom controls
+        // BOTTOM CONTROLS
         // -----------------------------------------------------
 
         paint.color =
@@ -3144,11 +3451,11 @@ private class SelectionFrameView(
 
                     FrameAction.MOVE -> {
 
-                        val frameWidth =
+                        val width =
                             originalRect.width()
 
 
-                        val frameHeight =
+                        val height =
                             originalRect.height()
 
 
@@ -3167,8 +3474,8 @@ private class SelectionFrameView(
                                 0,
                                 max(
                                     0,
-                                    width -
-                                            frameWidth
+                                    this.width -
+                                            width
                                 )
                             )
 
@@ -3178,8 +3485,8 @@ private class SelectionFrameView(
                                 0,
                                 max(
                                     0,
-                                    height -
-                                            frameHeight
+                                    this.height -
+                                            height
                                 )
                             )
 
@@ -3188,8 +3495,8 @@ private class SelectionFrameView(
                             Rect(
                                 newLeft,
                                 newTop,
-                                newLeft + frameWidth,
-                                newTop + frameHeight
+                                newLeft + width,
+                                newTop + height
                             )
 
 
@@ -3215,14 +3522,14 @@ private class SelectionFrameView(
                         newRight =
                             newRight.coerceIn(
                                 originalRect.left + 150,
-                                width
+                                this.width
                             )
 
 
                         newBottom =
                             newBottom.coerceIn(
                                 originalRect.top + 150,
-                                height
+                                this.height
                             )
 
 
@@ -3303,7 +3610,7 @@ private class SelectionFrameView(
 
 
     // =========================================================
-    // DETECT ACTION
+    // DETECT MOVE / RESIZE
     // =========================================================
 
     private fun detectAction(
@@ -3312,10 +3619,14 @@ private class SelectionFrameView(
     ): FrameAction {
 
         val handleRadius =
-            75f
+            70f
 
 
-        val distance =
+        // -----------------------------------------------------
+        // Bottom-right resize handle
+        // -----------------------------------------------------
+
+        val resizeDistance =
             distance(
                 x,
                 y,
@@ -3325,13 +3636,17 @@ private class SelectionFrameView(
 
 
         if (
-            distance <=
+            resizeDistance <=
             handleRadius
         ) {
 
             return FrameAction.RESIZE
         }
 
+
+        // -----------------------------------------------------
+        // Inside rectangle = MOVE
+        // -----------------------------------------------------
 
         if (
             rect.contains(
