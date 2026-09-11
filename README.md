@@ -1,5 +1,5 @@
 
-````markdown
+```
 # HelperAI
 
 > A universal Android on-screen AI assistant that captures, understands, and eventually acts on information visible on the user's screen.
