@@ -1,6 +1,3 @@
-Bilkul. Isko **proper production-level README** ki tarah document karna chahiye, sirf basic GitHub description nahi. Main architecture aur pipeline ko bhi clearly explain karunga, taaki 6 mahine baad bhi repository kholke tumhe yaad rahe ki system kaise kaam karta hai aur next kya build karna hai.
-
-Neeche **complete detailed `README.md`** hai. Isko directly GitHub ke `README.md` mein paste kar sakte ho.
 
 ````markdown
 # HelperAI
