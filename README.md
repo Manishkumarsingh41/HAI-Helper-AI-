@@ -2166,9 +2166,6 @@ License to be decided.
 
 ### Architecture ka main idea
 
-Is README mein sabse important distinction ye hai:
-
-**Abhi:**
 
 ```text
 Screen → OCR → Clean Text → Copy
@@ -2196,16 +2193,9 @@ Action Planning
 User Confirmation
   ↓
 Safe Automation
-```
-
-Yahi tumhare project ka **actual long-term architecture** hona chahiye. Current OCR code ko directly AI/form-filling code ke saath mix nahi karna. Har layer separate rakhenge, taaki project bada hone par maintain karna easy rahe.
-
-**GitHub mein `README.md` update karke commit/push:**
 
 ```bash
 git add README.md
 git commit -m "Add detailed project architecture and roadmap"
 git push
 ```
-
-Ab repository mein future ke liye proper documentation bhi saved rahegi.
